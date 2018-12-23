@@ -1,0 +1,3 @@
+- name: Test template
+  template: src=template.test dest=/template.test
+  tags: test

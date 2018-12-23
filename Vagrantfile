@@ -1,6 +1,5 @@
-# Port forwardings
-#
 OS="centos/7"
+
 
 PORTS_N1={ 8180 => 80,
 	   5156 => 5556,
@@ -23,7 +22,15 @@ PORTS_N3={ 8380 => 80,
 	   9302 => 9002,
 	   9303 => 9003 }
 
+NODES=[{ :name => "k8s-n1", :ports => PORTS_N1, :id => "01" },
+       { :name => "k8s-n2", :ports => PORTS_N2, :id => "02" },
+       { :name => "k8s-n3", :ports => PORTS_N3, :id => "03" },
+       { :name => "ansible-controller", :ports => {}, :id => "11" }]
+
 SHELL_SCRIPT = <<-END
+  sudo mv /etc/hosts /etc/hosts.original || true
+  sudo mv hosts /etc/hosts
+  chmod 0600 /home/vagrant/.ssh/id_rsa
   yum update
   yum install -y tree
   echo "$(date)" > /provisioned_at
@@ -32,32 +39,32 @@ END
 Vagrant.configure("2") do |config|
 
 
-  #config.vm.synced_folder "vagrant-shared", "/vagrant-shared"
+  config.ssh.insert_key = false
 
-  config.vm.define "k8s-n1" do |n1|
-    n1.vm.box = OS
-    n1.vm.network "private_network", ip: "10.0.0.101"
-    PORTS_N1.each do |port_host, port_guest|
-      n1.vm.network "forwarded_port", guest: port_guest, host: port_host
+  NODES.each do |node|
+    config.vm.define node[:name] do |cfg|
+      cfg.vm.box = OS
+      cfg.vm.network "private_network", ip: "10.0.0.1#{node[:id]}"
+      node[:ports].each do |port_host, port_guest|
+        cfg.vm.network "forwarded_port", guest: port_guest, host: port_host
+      end
+
+      if node[:name] == "ansible-controller"
+        cfg.vm.provision "ansible_local" do |ansible|
+          ansible.playbook = "ansible/site.yml"
+	  ansible.verbose = true
+	  ansible.install = true
+	  ansible.limit = "all"
+	  ansible.inventory_path = "ansible/hosts"
+	  ansible.config_file = "ansible/ansible.cfg"
+	end
+      end
     end
   end
 
-  config.vm.define "k8s-n2" do |n2|
-    n2.vm.box = OS
-    n2.vm.network "private_network", ip: "10.0.0.102"
-    PORTS_N2.each do |port_host, port_guest|
-      n2.vm.network "forwarded_port", guest: port_guest, host: port_host
-    end
-  end
 
-  config.vm.define "k8s-n3" do |n3|
-    n3.vm.box = OS
-    n3.vm.network "private_network", ip: "10.0.0.103"
-    PORTS_N3.each do |port_host, port_guest|
-      n3.vm.network "forwarded_port", guest: port_guest, host: port_host
-    end
-  end
-
+  config.vm.provision "file", source: "~/.vagrant.d/insecure_private_key", destination: "/home/vagrant/.ssh/id_rsa"
+  config.vm.provision "file", source: "shell/hosts", destination: "hosts"
   config.vm.provision "shell", inline: SHELL_SCRIPT
 
 end

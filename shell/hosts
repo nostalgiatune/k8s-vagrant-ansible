@@ -1,0 +1,5 @@
+127.0.0.1 localhost localhost.localdomain
+10.0.0.101 k8s-n1
+10.0.0.102 k8s-n2
+10.0.0.103 k8s-n3
+10.0.0.111 ansible-controller
