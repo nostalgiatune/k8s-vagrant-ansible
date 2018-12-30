@@ -1,4 +1,17 @@
 controller ansible_connection=local
+
 k8s-n1 ansible_ssh_host=10.0.0.101 ansible_ssh_private_key_file=/home/vagrant/.ssh/id_rsa
 k8s-n2 ansible_ssh_host=10.0.0.102 ansible_ssh_private_key_file=/home/vagrant/.ssh/id_rsa
 k8s-n3 ansible_ssh_host=10.0.0.103 ansible_ssh_private_key_file=/home/vagrant/.ssh/id_rsa
+
+[k8s-masters]
+k8s-n1
+
+[k8s-workers]
+k8s-n2
+k8s-n3
+
+[k8s-machines:children]
+k8s-masters
+k8s-workers
+

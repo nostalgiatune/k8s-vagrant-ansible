@@ -12,9 +12,9 @@
 # author: Tuomas Toivonen
 # date: 30.12.2018
 
-- name: Rakenna kubernetes-klusteri
+- name: Asenna docker ja kubernetes
 
-  hosts: all
+  hosts: k8s-machines
   become: true
   become_method: sudo
 
@@ -22,7 +22,6 @@
     - common
 
   tasks:
-
     - name: Poista swapfile
       tags:
         - os-settings
@@ -31,7 +30,7 @@
         fstype: swap
         state: absent
 
-    - name: Disabloi swap
+    - name: Disabloi swap-muisti
       tags:
         - os-settings
       command: swapoff -a
@@ -50,7 +49,7 @@
       notify:
         - sysctl-p
 
-    - name: Lisaa docker-ce stable repositorio
+    - name: Lisaa docker-ce -repositorio
       tags:
         - repos
       yum_repository:
@@ -64,7 +63,7 @@
           - https://download.docker.com/linux/centos/gpg
         state: present
 
-    - name: Lisaa kubernetes repositorio
+    - name: Lisaa kubernetes -repositorio
       tags:
         - repos
       yum_repository:
@@ -86,7 +85,7 @@
         name: docker-ce
         state: present
 
-    - name: Asenna NTP -paketit
+    - name: Asenna NTP -paketti
       tags:
         - packages
       yum:
@@ -104,7 +103,7 @@
         - kubeadm
         - kubectl
 
-    - name: Kaynnista taustapalvelut
+    - name: Kaynnista palvelut
       tags:
         - services
       service: name={{ item }} state=started enabled=yes
@@ -116,4 +115,67 @@
   handlers:
     - name: sysctl-p
       shell: "sysctl -p"
+
+
+- name: Alusta kubernetes masterit
+  become: true
+  become_method: sudo
+  hosts: k8s-masters
+  tags:
+    - cluster
+
+  tasks:
+    - name: kubeadm reset
+      shell: "kubeadm reset -f"
+
+    - name: kubeadm init
+      shell: "kubeadm init --apiserver-advertise-address=10.0.0.101 --pod-network-cidr=20.0.0.0/8" # TODO
+      register: kubeadm_out
+
+    - set_fact:
+        kubeadm_join: "{{ kubeadm_out.stdout_lines[-1] }}"
+      when: kubeadm_out.stdout.find("kubeadm join") != -1
+
+    - debug:
+        var: kubeadm_join
+
+    - name: Aseta ymparistomuuttujat
+      shell: >
+          cp /etc/kubernetes/admin.conf /home/vagrant/ &&
+          chown vagrant:vagrant /home/vagrant/admin.conf &&
+          export KUBECONFIG=/home/vagrant/admin.conf &&
+          echo export KUBECONFIG=$KUBECONFIG >> /home/vagrant/.bashrc
+
+- name: Konfiguroi CNI-verkko
+  become: true
+  become_method: sudo
+  hosts: k8s-masters
+  tags:
+    - cluster-network
+
+  tasks:
+    - sysctl: name=net.bridge.bridge-nf-call-iptables value=1 state=present reload=yes sysctl_set=yes
+    - sysctl: name=net.bridge.bridge-nf-call-ip6tables value=1 state=present reload=yes sysctl_set=yes
+    - name: Asenna Flannel-plugin
+      shell: >
+        export KUBECONFIG=/home/vagrant/admin.conf ;
+        kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+    - shell: sleep 10
+
+- name: Alusta kubernetes workerit
+  become: true
+  become_method: sudo
+  hosts: k8s-workers
+  tags:
+    - cluster
+
+  tasks:
+    - name: kubeadm reset
+      shell: "kubeadm reset -f"
+
+    - name: kubeadm join
+      tags:
+        - cluster
+      shell: "{{ hostvars['k8s-n1'].kubeadm_join }}" # TODO
 
