@@ -1,6 +1,119 @@
-- name: Apply common configuration
+---
+# file: site.yml
+# description: Asentaa ja kaynnistaa kubernetes-klusterin riippuvuuksineen
+#
+# resources:
+#   - https://kubernetes.io/docs/setup/independent/install-kubeadm/
+#   - http://michele.sciabarra.com/2018/02/12/devops/Kubernetes-with-KubeAdm-Ansible-Vagrant/
+#   - https://docs.ansible.com/ansible/latest/modules/
+#   - https://github.com/geerlingguy/ansible-role-kubernetes/blob/master/tasks/setup-RedHat.yml
+#   - https://docs.docker.com/install/linux/docker-ce/centos/
+#
+# author: Tuomas Toivonen
+# date: 30.12.2018
+
+- name: Rakenna kubernetes-klusteri
+
   hosts: all
   become: true
   become_method: sudo
+
   roles:
-          - common
+    - common
+
+  tasks:
+
+    - name: Poista swapfile
+      tags:
+        - os-settings
+      mount:
+        name: swap
+        fstype: swap
+        state: absent
+
+    - name: Disabloi swap
+      tags:
+        - os-settings
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Konfiguroi iptables
+      tags:
+        - os-settings
+      lineinfile:
+          dest: /etc/sysctl.conf
+          line: "{{ item }}"
+          state: present
+      loop:
+        - 'net.bridge.bridge-nf-call-iptables = 1'
+        - 'net.bridge.bridge-nf-call-ip6tables = 1'
+      notify:
+        - sysctl-p
+
+    - name: Lisaa docker-ce stable repositorio
+      tags:
+        - repos
+      yum_repository:
+        name: docker-ce
+        description: docker-ce
+        baseurl: https://download.docker.com/linux/centos/7/x86_64/stable/
+        enabled: true
+        gpgcheck: true
+        repo_gpgcheck: true
+        gpgkey:
+          - https://download.docker.com/linux/centos/gpg
+        state: present
+
+    - name: Lisaa kubernetes repositorio
+      tags:
+        - repos
+      yum_repository:
+        name: kubernetes
+        description: kubernetes
+        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        enabled: true
+        gpgcheck: true
+        repo_gpgcheck: true
+        gpgkey:
+          - https://packages.cloud.google.com/yum/doc/yum-key.gpg
+          - https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        state: present
+
+    - name: Asenna docker-ce -paketti
+      tags:
+        - packages
+      yum:
+        name: docker-ce
+        state: present
+
+    - name: Asenna NTP -paketit
+      tags:
+        - packages
+      yum:
+        name: ntp
+        state: present
+
+    - name: Asenna kubernetes -paketit
+      tags:
+        - packages
+      yum:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Kaynnista taustapalvelut
+      tags:
+        - services
+      service: name={{ item }} state=started enabled=yes
+      loop:
+        - docker
+        - ntpd
+        - kubelet
+
+  handlers:
+    - name: sysctl-p
+      shell: "sysctl -p"
+
