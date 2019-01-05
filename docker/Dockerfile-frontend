@@ -1,0 +1,10 @@
+FROM openjdk:8-jdk-alpine
+RUN mkdir -p /build
+COPY app/  /build/
+RUN ls -la /build
+WORKDIR /build
+RUN ./gradlew build
+
+FROM openjdk:8-jdk-alpine
+COPY --from=0 /build/frontend/build/libs/frontend-1.0.0.jar /app.jar
+ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "/app.jar"]

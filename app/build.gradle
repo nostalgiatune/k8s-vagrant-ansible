@@ -1,0 +1,5 @@
+allprojects {
+}
+subprojects {
+  //Put instructions for each sub project
+}
