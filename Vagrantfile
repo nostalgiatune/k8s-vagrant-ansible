@@ -44,6 +44,7 @@ Vagrant.configure("2") do |config|
   NODES.each do |node|
     config.vm.define node[:name] do |cfg|
       cfg.vm.box = OS
+      cfg.vm.hostname = node[:name]
       cfg.vm.network "private_network", ip: "10.0.0.1#{node[:id]}"
       cfg.vm.provider "virtualbox" do |vb|
         vb.memory = 2000

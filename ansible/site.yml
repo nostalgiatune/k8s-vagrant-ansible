@@ -129,7 +129,7 @@
       shell: "kubeadm reset -f"
 
     - name: kubeadm init
-      shell: "kubeadm init --apiserver-advertise-address=10.0.0.101 --pod-network-cidr=20.0.0.0/8" # TODO
+      shell: "kubeadm init --token-ttl=0 --apiserver-advertise-address=10.0.0.101 --pod-network-cidr=20.0.0.0/8" # TODO
       register: kubeadm_out
 
     - set_fact:
