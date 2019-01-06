@@ -21,6 +21,15 @@
   roles:
     - common
 
+  vars:
+    ip_modules:
+      - ip_vs
+      - ip_vs_rr
+      - ip_vs_wrr
+      - ip_vs_sh
+      - nf_conntrack_ipv4
+      - br_netfilter
+
   tasks:
     - name: Poista swapfile
       tags:
@@ -36,18 +45,43 @@
       command: swapoff -a
       when: ansible_swaptotal_mb > 0
 
-    - name: Konfiguroi iptables
+    - name: Konfiguroi verkkoasetukset
+      tags:
+        - os-settings
+      command: modprobe {{ item }}
+      loop: "{{ ip_modules }}"
+
+    - name: Lataa vaadittavat kerneli-moduulit
       tags:
         - os-settings
       lineinfile:
-          dest: /etc/sysctl.conf
-          line: "{{ item }}"
+        path: "/etc/modules"
+        line: "{{ item }}"
+        create: yes
+        state: present
+      loop: "{{ ip_modules }}"
+
+    - name: iptables
+      tags:
+        - os-settings
+      sysctl:
+          name: "{{ item }}"
+          value: 1
+          sysctl_set: yes
           state: present
+          reload: yes
       loop:
-        - 'net.bridge.bridge-nf-call-iptables = 1'
-        - 'net.bridge.bridge-nf-call-ip6tables = 1'
-      notify:
-        - sysctl-p
+        - 'net.bridge.bridge-nf-call-iptables'
+        - 'net.bridge.bridge-nf-call-ip6tables'
+    
+    - name: Salli IP-reititys
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+        state: present
+        reload: yes
+        sysctl_set: yes
+
 
     - name: Lisaa docker-ce -repositorio
       tags:
@@ -111,11 +145,6 @@
         - docker
         - ntpd
         - kubelet
-
-  handlers:
-    - name: sysctl-p
-      shell: "sysctl -p"
-
 
 - name: Alusta kubernetes masterit
   become: true
